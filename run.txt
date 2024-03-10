@@ -1,0 +1,8 @@
+
+g++ -c DataVector.cpp 
+g++ -c VectorDataset.cpp
+g++ -c TreeIndex.cpp
+ar rcs  libTrees.a DataVector.o VectorDataset.o TreeIndex.o
+g++  .cpp -L. -lTrees
+./a.exe
+
