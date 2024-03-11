@@ -113,6 +113,7 @@ int KDTreeIndex::maxSpreadAxis()
 
 KDTreeIndex *KDTreeIndex::MakeTree()
 {
+    cout << "Making KD tree";
     if (Data.getDataset().size() <= 100)
     {
         return this;
@@ -233,258 +234,172 @@ vector<DataVector> KDTreeIndex::Search(const DataVector &query, int k)
     return result;
 }
 
-// Create Instance
-RPTreeIndex &RPTreeIndex::GetInstance()
+RPTreeIndex *RPTreeIndex::instance = nullptr;
+
+RPTreeIndex::RPTreeIndex() : root(nullptr) {}
+
+RPTreeIndex *RPTreeIndex::GetInstance()
 {
-    static RPTreeIndex instance;
+    if (!instance)
+    {
+        instance = new RPTreeIndex();
+    }
     return instance;
 }
 
-RPTreeIndex::~RPTreeIndex()
+std::vector<double> RPTreeIndex::randomUnitDirection(size_t dimensions)
 {
-    if (left != NULL)
-        delete left;
-    if (right != NULL)
-        delete right;
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<double> dis(-1.0, 1.0);
+
+    std::vector<double> direction(dimensions, 0.0);
+    double sum = 0.0;
+    for (size_t i = 0; i < dimensions; ++i)
+    {
+        direction[i] = dis(gen);
+        sum += direction[i] * direction[i];
+    }
+    double norm = sqrt(sum);
+    for (size_t i = 0; i < dimensions; ++i)
+    {
+        direction[i] /= norm;
+    }
+    return direction;
 }
 
-DataVector RPTreeIndex::RandomUnitDirection()
+int RPTreeIndex::randomX(int k)
 {
-    // Generate random values for each dimension of the vector
-    vector<double> values;
-    double randomDouble = -1 + static_cast<double>(rand()) / (RAND_MAX / 2);
-    for (int i = 0; i < Data.getDataset()[0].getDimension(); ++i)
-    {
-        values.push_back(randomDouble);
-    }
-
-    // Normalize the vector to obtain a unit direction vector
-    double length = sqrt(inner_product(values.begin(), values.end(), values.begin(), 0.0));
-    vector<double> normalized_values;
-    for (double val : values)
-    {
-        normalized_values.push_back(val / length);
-    }
-    DataVector result;
-    result.setValues(normalized_values);
-    return result;
+    return rand() % k;
 }
 
-// Function to find the farthest point from a given point in the dataset
-DataVector RPTreeIndex::FindFarthestPoint(const DataVector &point)
+RPTreeIndex::Node *RPTreeIndex::buildTree(std::vector<DataVector> &points)
 {
-    double maxDistance = 0;
-    DataVector farthestPoint;
-
-    // Iterate through all points in the dataset
-    for (int i = 0; i < Data.getDataset().size(); ++i)
+    if (points.empty())
     {
-        DataVector currentPoint = Data.getDataset()[i];
-        // Calculate the distance between the current point and the given point
-        double distance = point.dist(currentPoint);
-        // Update the farthest point if needed
-        if (distance > maxDistance)
+        return nullptr;
+    }
+
+    return buildTree(points.begin(), points.end());
+}
+
+RPTreeIndex::Node *RPTreeIndex::buildTree(std::vector<DataVector>::iterator begin, std::vector<DataVector>::iterator end)
+{
+    int k = begin->getVector().size();
+    std::vector<double> axis = randomUnitDirection(k);
+
+    if (end - begin <= 100)
+    {
+        Node *newnode = new Node;
+        newnode->axis = axis;
+        newnode->left = nullptr;
+        newnode->right = nullptr;
+        newnode->medianval = -1;
+        newnode->v = std::vector<DataVector>(begin, end); // Store the points in leaf nodes
+        return newnode;
+    }
+
+    DataVector x = *(begin + randomX(end - begin));
+
+    DataVector y;
+    double maxdist = 0;
+
+    for (auto it = begin; it != end; it++)
+    {
+        double dist = 0;
+        dist = (*it) * x;
+        if (dist > maxdist)
         {
-            maxDistance = distance;
-            farthestPoint = currentPoint;
-        }
-    }
-    return farthestPoint;
-}
-
-DataVector RPTreeIndex::SelectRandomPoint()
-{
-    // Randomly select an index within the range of the dataset
-    int index = rand() % Data.getDataset().size();
-    // Get the data vector at the selected index
-    return Data.getDataset()[index];
-}
-
-double RPTreeIndex::CalculateProjection(const DataVector &point, const DataVector &direction) const
-{
-    // Calculate the dot product of the point and the direction vector
-    return inner_product(point.getVector().begin(), point.getVector().end(), direction.getVector().begin(), 0.0);
-}
-
-double RPTreeIndex::CalculateMedianProjection(const DataVector &direction) const
-{
-    vector<double> projections;
-
-    // Calculate the projection of each point in S onto the direction vector
-    for (const auto &data : Data.getDataset())
-    {
-        double projection = CalculateProjection(data, direction);
-        projections.push_back(projection);
-    }
-
-    // Sort the projections vector
-    sort(projections.begin(), projections.end());
-
-    // Calculate the median value of the sorted projections
-    return projections[projections.size() / 2];
-}
-
-double RPTreeIndex::getThreshold() const
-{
-    return threshold;
-}
-
-pair<VectorDataset, VectorDataset> RPTreeIndex::ChooseRule()
-{
-    // Step 1: Choose a random unit direction v
-    DataVector v = RandomUnitDirection();
-    randomDirection.setValues(v.getVector());
-
-    // Step 2: Select a random point x from the dataset S
-    DataVector x = SelectRandomPoint();
-
-    // Step 3: Find the farthest point y from x in S
-    DataVector y = FindFarthestPoint(x);
-
-    // Step 4: Choose a random offset δ
-    double delta = (double)rand() / RAND_MAX * 2 - 1;
-
-    // Step 5: Define the partitioning rule
-    auto Rule = [&](const DataVector &point)
-    {
-        // Calculate the projection of the point onto the direction v
-        double projection = CalculateProjection(point, v);
-
-        // Calculate the threshold value based on the median of projections and the random offset δ
-        median = CalculateMedianProjection(v);
-        threshold = median + delta;
-
-        // Compare the projection with the threshold value to determine the partitioning
-        return projection <= threshold;
-    };
-
-    // Step 6: Apply the partitioning rule to split the dataset into two subsets
-    VectorDataset leftSubset, rightSubset;
-    for (const auto &data : Data.getDataset())
-    {
-        if (Rule(data))
-        {
-            leftSubset.pushValue(data);
-        }
-        else
-        {
-            rightSubset.pushValue(data);
+            maxdist = dist;
+            y = *it;
         }
     }
 
-    // Step 7: Return a pair of VectorDatasets containing the split dataset
-    return {leftSubset, rightSubset};
+    Node *newnode = new Node;
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<double> dis(-1.0, 1.0);
+    double delta = dis(gen) * 6 * (x.dist(y)) / sqrt(k);
+
+    newnode->axis = axis;
+    std::sort(begin, end, [axis](const DataVector &a, const DataVector &b)
+              {DataVector Axis;
+             Axis.setValues(axis);
+             return a*Axis < b*Axis; });
+
+    auto medianiter = begin + (end - begin) / 2;
+    DataVector Axis;
+    Axis.setValues(axis);
+    newnode->medianval = *medianiter * Axis + delta;
+    for (auto it = begin; it != end; it++)
+    {
+        newnode->v.push_back(*it);
+    }
+
+    newnode->left = buildTree(begin, medianiter + 1);
+    newnode->right = buildTree(medianiter + 1, end);
+
+    return newnode;
 }
 
-RPTreeIndex *RPTreeIndex::MakeTree()
+std::vector<DataVector> RPTreeIndex::search(DataVector &point, Node *node, int k)
 {
-    // Base case: if dataset size is below threshold, return leaf node
-    if (Data.getDataset().size() <= 100)
+    if (node == nullptr)
     {
-        return this;
+        return std::vector<DataVector>();
     }
-
-    pair<VectorDataset, VectorDataset> leftRight = ChooseRule();
-    RPTreeIndex *leftChild = new RPTreeIndex();
-    RPTreeIndex *rightChild = new RPTreeIndex();
-
-    for (const auto &data : leftRight.first.getDataset())
+    if (node->medianval == -1)
     {
-        leftChild->AddData(data);
+        return node->v;
     }
+    DataVector Node_axis;
+    Node_axis.setValues(node->axis);
+    double compareval = point * (Node_axis);
+    std::vector<DataVector> nneighbours, sibling;
+    Node *temp;
 
-    // Add data to right child
-    for (const auto &data : leftRight.second.getDataset())
+    if (compareval <= node->medianval)
     {
-        rightChild->AddData(data);
-    }
-
-    // Recursively build left and right subtrees
-    left = leftChild->MakeTree();
-    right = rightChild->MakeTree();
-
-    return this;
-}
-
-DataVector RPTreeIndex::getDirection() const
-{
-    return randomDirection;
-}
-
-double RPTreeIndex::calculateDistanceToHyperplane(RPTreeIndex* node, const DataVector &query) const {
-    // Calculate the projection of the query point onto the hyperplane at the current node
-    double projection = CalculateProjection(query, node->randomDirection);
-    
-    // Calculate the distance from the query point to the hyperplane
-    return abs(projection - node->median);
-}
-
-
-vector<DataVector> RPTreeIndex::Search(const DataVector &query, int k)
-{
-    // If leaf node is reached, compute nearest neighbors using kNearestNeighbor function
-    if (left == nullptr && right == nullptr)
-    {
-        VectorDataset nearestNeighbors = Data.kNearestNeighbor(query, k);
-        return nearestNeighbors.getDataset();
-    }
-
-    // Search left or right subtree based on query point's position
-    vector<DataVector> result;
-    double projection = CalculateProjection(query, getDirection());
-    if (projection <= threshold)
-    {
-        result = left->Search(query, k);
+        temp = node->left;
+        nneighbours = search(point, node->left, k);
+        sibling = node->right->v;
     }
     else
     {
-        result = right->Search(query, k);
+        temp = node->right;
+        nneighbours = search(point, node->right, k);
+        sibling = node->left->v;
     }
 
-    // Backtrack and explore sibling node if necessary
-    double distanceToBoundary = calculateDistanceToHyperplane(this, query);
-    for (const auto &data : result)
+    double maxdist = -1;
+    for (auto it = nneighbours.begin(); it != nneighbours.end(); it++)
     {
-        double distToData = query.dist(data);
-        // Check if current farthest point is nearer than the distance from the boundary with the sibling
-        if (result.size() < k || distToData < distanceToBoundary)
+        if (it->dist(point) > maxdist)
         {
-            // Explore sibling node's region
-            vector<DataVector> siblingResult;
-            if (projection <= threshold)
-            {
-                siblingResult = right->Search(query, k);
-            }
-            else
-            {
-                siblingResult = left->Search(query, k);
-            }
-            // Update nearest neighbors list if necessary
-            for (const auto &siblingData : siblingResult)
-            {
-                double distToSiblingData = siblingData.dist(query);
-                if (result.size() < k || distToSiblingData < distToData)
-                {
-                    result.push_back(siblingData);
-                    // Keep the list sorted by distance from the query point
-                    std::sort(result.begin(), result.end(), [&](const DataVector &a, const DataVector &b)
-                              { return a.dist(query) < b.dist(query); });
-                    // Ensure the list has at most k elements
-                    if (result.size() > k)
-                    {
-                        result.pop_back();
-                    }
-                    // Update distance to boundary for further pruning
-                    distanceToBoundary = result.back().dist(query);
-                }
-            }
-        }
-        else
-        {
-            // No need to explore sibling region, backtrack
-            break;
+            maxdist = it->dist(point);
         }
     }
+    DataVector temp_axis;
+    temp_axis.setValues(temp->axis);
+    double mediandist = abs(node->medianval - point * temp_axis);
 
-    return result;
+    if (maxdist > mediandist || nneighbours.size() < k)
+    {
+        for (auto it = sibling.begin(); it != sibling.end(); it++)
+        {
+            nneighbours.push_back(*it);
+        }
+    }
+    return nneighbours;
 }
+void RPTreeIndex::maketree(vector<DataVector> &points)
+{
+    root = buildTree(points);
+}
+
+vector<DataVector> RPTreeIndex:: query_search(DataVector &point, int k)
+{
+    return search(point, root, k);
+}
+
+

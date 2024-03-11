@@ -39,34 +39,32 @@ private:
     KDTreeIndex *right;
 };
 
-class RPTreeIndex : public TreeIndex
-{
-public:
-    ~RPTreeIndex();
-    static RPTreeIndex &GetInstance();
-    RPTreeIndex *MakeTree();
-    pair<VectorDataset,VectorDataset> ChooseRule();
-    vector<DataVector> Search(const DataVector &query, int k);
-    DataVector RandomUnitDirection();
-    DataVector SelectRandomPoint();
-    DataVector FindFarthestPoint(const DataVector& x);
-    double RandomOffset();
-    double CalculateProjection(const DataVector& point, const DataVector& direction) const;
-    double CalculateMedianProjection(const DataVector& direction) const;
-    void setRandomDirection(const DataVector& dir);
-    double calculateDistanceToHyperplane(RPTreeIndex* node, const DataVector &query) const;
-    DataVector getDirection() const;
-    double getThreshold() const;
-
-
+class RPTreeIndex : public TreeIndex {
 private:
-    DataVector randomDirection;
-    double threshold;
-    double median;
-    VectorDataset Data;
-    RPTreeIndex(){};
-    RPTreeIndex *left;
-    RPTreeIndex *right;
+    struct Node {
+        std::vector<DataVector> v;
+        Node* left;
+        Node* right;
+        double medianval;
+        std::vector<double> axis;
+    };
+
+    Node* root;
+
+    // Private helper functions...
+    std::vector<double> randomUnitDirection(size_t dimensions);
+    int randomX(int k);
+    Node* buildTree(std::vector<DataVector>& points);
+    Node* buildTree(std::vector<DataVector>::iterator begin, std::vector<DataVector>::iterator end);
+    std::vector<DataVector> search(DataVector &point, Node* node, int k);
+    
+    static RPTreeIndex *instance;
+
+public:
+    RPTreeIndex();
+    static RPTreeIndex *GetInstance();
+    void maketree(std::vector<DataVector> &points);
+    std::vector<DataVector> query_search(DataVector &point, int k);
 };
 
 #endif
