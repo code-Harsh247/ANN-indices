@@ -288,7 +288,7 @@ RPTreeIndex::Node *RPTreeIndex::buildTree(std::vector<DataVector>::iterator begi
     int k = begin->getVector().size();
     std::vector<double> axis = randomUnitDirection(k);
 
-    if (end - begin <= 100)
+    if (end - begin <= 2)
     {
         Node *newnode = new Node;
         newnode->axis = axis;

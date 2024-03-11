@@ -105,6 +105,8 @@ int main()
         for (auto testVector : testVectors)
         {
             vector<DataVector> smallset = RPTreeIndex::GetInstance()->query_search(testVector, k);
+            VectorDataset SmallSet(smallset);
+            VectorDataset nNeighbours= SmallSet.kNearestNeighbor(testVector,k);
             if (!nearestNeighborsFile.is_open())
             {
                 cout << "Could not create the nearest neighbors file: " << nearestNeighborsFileName << endl;
@@ -112,9 +114,9 @@ int main()
             }
 
             // Write the nearest neighbors to the CSV file
-            for (size_t i = 0; i < smallset.size(); ++i)
+            for (size_t i = 0; i < nNeighbours.getDataset().size(); ++i)
             {
-                const DataVector &neighbor = smallset[i];
+                const DataVector &neighbor = nNeighbours.getDataset()[i];
                 size_t dimension = neighbor.getDimension();
 
                 for (size_t j = 0; j < dimension; ++j)
