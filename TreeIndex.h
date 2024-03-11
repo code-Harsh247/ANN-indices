@@ -42,11 +42,31 @@ private:
 class RPTreeIndex : public TreeIndex
 {
 public:
+    ~RPTreeIndex();
     static RPTreeIndex &GetInstance();
+    RPTreeIndex *MakeTree();
+    pair<VectorDataset,VectorDataset> ChooseRule();
+    vector<DataVector> Search(const DataVector &query, int k);
+    DataVector RandomUnitDirection();
+    DataVector SelectRandomPoint();
+    DataVector FindFarthestPoint(const DataVector& x);
+    double RandomOffset();
+    double CalculateProjection(const DataVector& point, const DataVector& direction) const;
+    double CalculateMedianProjection(const DataVector& direction) const;
+    void setRandomDirection(const DataVector& dir);
+    double calculateDistanceToHyperplane(RPTreeIndex* node, const DataVector &query) const;
+    DataVector getDirection() const;
+    double getThreshold() const;
+
 
 private:
-    RPTreeIndex() {}
-    ~RPTreeIndex() {}
+    DataVector randomDirection;
+    double threshold;
+    double median;
+    VectorDataset Data;
+    RPTreeIndex(){};
+    RPTreeIndex *left;
+    RPTreeIndex *right;
 };
 
 #endif

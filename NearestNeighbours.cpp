@@ -93,6 +93,50 @@ int main()
             nearestNeighborsFile << "\n";
         }
     }
+    else if(n==2){
+        RPTreeIndex RPTREE = RPTreeIndex::GetInstance();
+        for (int i = 0; i < dataset.getDataset().size(); i++)
+        {
+            RPTREE.AddData(dataset.getDataVector(i));
+        }
+        RPTreeIndex *tree = RPTREE.MakeTree();
+        cout << "Tree constructed" << endl;
+        size_t k;
+        cout << "Enter the value of k: ";
+        cin >> k;
+        vector<DataVector> testVectors = testDataset.getDataset();
+        for (auto testVector : testVectors)
+        {
+            VectorDataset kNearestNeighbors = RPTREE.Search(testVector, k);
+            const vector<DataVector> &neighbors = kNearestNeighbors.getDataset();
+            cout<<neighbors.size()<<endl;
+
+            if (!nearestNeighborsFile.is_open())
+            {
+                cout << "Could not create the nearest neighbors file: " << nearestNeighborsFileName << endl;
+                return 1;
+            }
+
+            // Write the nearest neighbors to the CSV file
+            for (size_t i = 0; i < neighbors.size(); ++i)
+            {
+                const DataVector &neighbor = neighbors[i];
+                size_t dimension = neighbor.getDimension();
+
+                for (size_t j = 0; j < dimension; ++j)
+                {
+                    nearestNeighborsFile << neighbor[j];
+                    if (j < dimension - 1)
+                    {
+                        nearestNeighborsFile << ",";
+                    }
+                }
+
+                nearestNeighborsFile << "\n";
+            }
+            nearestNeighborsFile << "\n";
+        }
+    }
     else
     {
         cout << "Invalid input" << endl;
